@@ -12,6 +12,16 @@ export const SubmissionDetailModal = ({ submissionId, onClose, onUpdated }) => {
   const [savingOverride, setSavingOverride] = useState(null);
   const [publishing, setPublishing] = useState(false);
 
+  // Phase A: Teacher fairness correction state
+  const [editingAnswerId, setEditingAnswerId] = useState(null);
+  const [teacherCorrectText, setTeacherCorrectText] = useState('');
+  const [teacherCorrectNote, setTeacherCorrectNote] = useState('');
+  const [savingTeacherCorrect, setSavingTeacherCorrect] = useState(false);
+
+  // Phase B: Teacher alternative method actions
+  const [savingMethodQId, setSavingMethodQId] = useState(null);
+  const [regradingQId, setRegradingQId] = useState(null);
+
   const fetchDetail = async () => {
     try {
       setLoading(true);
@@ -107,6 +117,98 @@ export const SubmissionDetailModal = ({ submissionId, onClose, onUpdated }) => {
     }
   };
 
+  const handleTeacherCorrectSubmit = async (ansId) => {
+    if (!teacherCorrectText.trim()) {
+      alert('Answer text cannot be blank.');
+      return;
+    }
+    try {
+      setSavingTeacherCorrect(true);
+      const res = await apiFetch(`/api/review/submissions/${submissionId}/answers/${ansId}/teacher-correct`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          corrected_text: teacherCorrectText.trim(),
+          note: teacherCorrectNote.trim() || 'Teacher fairness correction',
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.detail || 'Correction failed');
+      }
+
+      setEditingAnswerId(null);
+      await fetchDetail();
+      if (onUpdated) onUpdated();
+    } catch (err) {
+      alert('Error updating text: ' + err.message);
+    } finally {
+      setSavingTeacherCorrect(false);
+    }
+  };
+
+  // Phase B: Accept verified/alternative method
+  const handleAcceptMethod = async (questionId, methodText) => {
+    const note = window.prompt(
+      'Accept this method as a teacher-approved alternative solution?\nEnter a descriptive note:',
+      'Approved alternative solution (verified mathematically)'
+    );
+    if (!note) return;
+
+    try {
+      setSavingMethodQId(questionId);
+      const res = await apiFetch(`/api/review/questions/${questionId}/accept-method`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          method_text: methodText,
+          note: note.trim(),
+          submission_id: submissionId,
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.detail || 'Failed to accept alternative method');
+      }
+
+      alert('✓ Alternative method accepted and saved as a teacher-approved solution for this question!');
+      await fetchDetail();
+      if (onUpdated) onUpdated();
+    } catch (err) {
+      alert('Error: ' + err.message);
+    } finally {
+      setSavingMethodQId(null);
+    }
+  };
+
+  // Phase B: Regrade unpublished submissions for this question
+  const handleRegradeUnpublished = async (questionId) => {
+    if (!window.confirm('Regrade all unpublished submissions for this question? Published submissions will NOT be changed.')) return;
+
+    try {
+      setRegradingQId(questionId);
+      const res = await apiFetch(`/api/review/questions/${questionId}/regrade-unpublished`, {
+        method: 'POST',
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.detail || 'Regrade failed');
+      }
+
+      const data = await res.json();
+      alert(`✓ ${data.message}`);
+      await fetchDetail();
+      if (onUpdated) onUpdated();
+    } catch (err) {
+      alert('Error regrading: ' + err.message);
+    } finally {
+      setRegradingQId(null);
+    }
+  };
+
   // Helper to highlight prompt injection phrases in text
   const renderHighlightedText = (text, injectionPhrases) => {
     if (!injectionPhrases || injectionPhrases.length === 0) {
@@ -188,12 +290,24 @@ export const SubmissionDetailModal = ({ submissionId, onClose, onUpdated }) => {
               <h3 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-main)' }}>
                 {data.student_name} ({data.student_email})
               </h3>
+              <span className="badge" style={{ backgroundColor: data.assignment_kind === 'examination' ? '#EFF6FF' : '#F0FDF4', color: data.assignment_kind === 'examination' ? '#1E40AF' : '#166534', border: '1px solid ' + (data.assignment_kind === 'examination' ? '#BFDBFE' : '#BBF7D0'), fontWeight: 600 }}>
+                {data.assignment_kind === 'examination' ? '🎓 Examination' : '📝 Assignment'}
+              </span>
               <span className={`badge ${data.status === 'published' ? 'badge-approved' : data.status === 'approved' ? 'badge-approved' : 'badge-flagged'}`}>
                 {data.status.toUpperCase()}
               </span>
               <span className="badge" style={{ backgroundColor: 'var(--panel-bg)', color: 'var(--primary)', border: '1px solid var(--border)' }}>
                 Confidence: {data.confidence}
               </span>
+              {data.risk_score !== undefined && (
+                <span
+                  className={`badge ${data.risk_band === 'High' ? 'badge-error' : data.risk_band === 'Medium' ? 'badge-flagged' : 'badge-approved'}`}
+                  style={{ fontWeight: 700 }}
+                  title="Computed Risk Score (0-100)"
+                >
+                  {data.risk_band === 'High' ? '🚨' : data.risk_band === 'Medium' ? '⚠️' : '✓'} Risk: {data.risk_score}/100 ({data.risk_band})
+                </span>
+              )}
               {data.is_late && (
                 <span className="badge badge-flagged">
                   Late ({data.late_penalty}% penalty)
@@ -237,37 +351,170 @@ export const SubmissionDetailModal = ({ submissionId, onClose, onUpdated }) => {
               Student Submission (Left View)
             </h4>
 
-            {data.answers.map((ans) => (
-              <div key={ans.answer_id} className="card" style={{ marginBottom: '1.25rem', backgroundColor: '#FFFFFF' }}>
-                <div style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--primary)', marginBottom: '0.5rem' }}>
-                  Question {ans.question_number}: {ans.question_text} ({ans.max_marks} pts)
+            {/* Student Reported OCR Issue Banner */}
+            {data.student_comment && (
+              <div style={{
+                backgroundColor: '#FFFBEB',
+                border: '1px solid #FCD34D',
+                borderRadius: '8px',
+                padding: '0.85rem 1rem',
+                marginBottom: '1.25rem',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.35rem' }}>
+                  <span style={{ fontSize: '1.1rem' }}>💬</span>
+                  <strong style={{ color: '#92400E', fontSize: '0.9rem' }}>Student Reported OCR Issue:</strong>
+                  <span className="badge badge-flagged" style={{ fontSize: '0.7rem' }}>Action Required</span>
                 </div>
-
-                {ans.injection_detected && (
-                  <div className="badge-error" style={{ padding: '0.35rem 0.6rem', borderRadius: '4px', fontSize: '0.75rem', marginBottom: '0.5rem', display: 'inline-block' }}>
-                    ⚠️ Injection attempt detected (grade not altered)
-                  </div>
-                )}
-
-                <div style={{
-                  backgroundColor: 'var(--panel-bg)',
-                  padding: '0.75rem',
-                  borderRadius: '6px',
-                  border: '1px solid var(--border)',
-                  fontSize: '0.875rem',
-                  lineHeight: 1.6,
-                  whiteSpace: 'pre-wrap',
-                }}>
-                  {renderHighlightedText(ans.student_answer_text, ans.injection_phrases)}
+                <div style={{ fontSize: '0.875rem', color: '#78350F', fontStyle: 'italic', marginBottom: '0.4rem' }}>
+                  "{data.student_comment}"
                 </div>
-
-                {data.file_status === 'OCR low confidence' && (
-                  <div style={{ marginTop: '0.5rem', fontSize: '0.75rem', color: '#D97706' }}>
-                    🔍 OCR was used. Review text against original page scan above if text looks garbled.
-                  </div>
-                )}
+                <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                  Original Upload: <strong>{data.original_filename || 'Uploaded Document'}</strong> • Extraction Status: {data.file_status}
+                </div>
               </div>
-            ))}
+            )}
+
+            {data.answers.map((ans) => {
+              const hasDiff = ans.student_edited && ans.original_answer_text && ans.original_answer_text !== ans.student_answer_text;
+              const isTeacherEditingThis = editingAnswerId === ans.answer_id;
+
+              return (
+                <div key={ans.answer_id} className="card" style={{ marginBottom: '1.25rem', backgroundColor: '#FFFFFF' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                    <div style={{ fontWeight: 600, fontSize: '0.9rem', color: 'var(--primary)' }}>
+                      Question {ans.question_number}: {ans.question_text} ({ans.max_marks} pts)
+                    </div>
+                    <div style={{ display: 'flex', gap: '0.3rem' }}>
+                      {ans.student_edited && (
+                        <span className="badge" style={{ backgroundColor: '#EFF6FF', color: '#2563EB', fontSize: '0.7rem' }}>
+                          ✏️ Student Edited
+                        </span>
+                      )}
+                      {ans.teacher_edited && (
+                        <span className="badge" style={{ backgroundColor: '#F5F3FF', color: '#7C3AED', fontSize: '0.7rem' }}>
+                          ⚖️ Teacher Corrected
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {ans.injection_detected && (
+                    <div className="badge-error" style={{ padding: '0.35rem 0.6rem', borderRadius: '4px', fontSize: '0.75rem', marginBottom: '0.5rem', display: 'inline-block' }}>
+                      ⚠️ Injection attempt detected (grade not altered)
+                    </div>
+                  )}
+
+                  {/* Diff: Original Extracted Text if Edited */}
+                  {hasDiff && (
+                    <div style={{
+                      backgroundColor: '#FEF2F2',
+                      border: '1px solid #FECACA',
+                      borderRadius: '6px',
+                      padding: '0.6rem 0.75rem',
+                      marginBottom: '0.6rem',
+                    }}>
+                      <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#991B1B', marginBottom: '0.2rem' }}>
+                        Original Extracted Text (Before Student Edit):
+                      </div>
+                      <div style={{ fontSize: '0.825rem', color: '#7F1D1D', whiteSpace: 'pre-wrap', fontStyle: 'italic' }}>
+                        {ans.original_answer_text}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Final Text (Used for Grading) */}
+                  <div>
+                    {hasDiff && (
+                      <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#166534', marginBottom: '0.2rem' }}>
+                        Final Text (Used for Grading):
+                      </div>
+                    )}
+                    <div style={{
+                      backgroundColor: hasDiff ? '#F0FDF4' : 'var(--panel-bg)',
+                      padding: '0.75rem',
+                      borderRadius: '6px',
+                      border: hasDiff ? '1px solid #BBF7D0' : '1px solid var(--border)',
+                      fontSize: '0.875rem',
+                      lineHeight: 1.6,
+                      whiteSpace: 'pre-wrap',
+                    }}>
+                      {renderHighlightedText(ans.student_answer_text, ans.injection_phrases)}
+                    </div>
+                  </div>
+
+                  {/* Fairness Safety Net: Teacher Correct Extracted Text */}
+                  <div style={{ marginTop: '0.6rem' }}>
+                    {!isTeacherEditingThis ? (
+                      <button
+                        type="button"
+                        className="btn btn-outline btn-sm"
+                        style={{ fontSize: '0.75rem', padding: '0.25rem 0.6rem' }}
+                        onClick={() => {
+                          setEditingAnswerId(ans.answer_id);
+                          setTeacherCorrectText(ans.student_answer_text);
+                          setTeacherCorrectNote('Teacher fairness correction');
+                        }}
+                      >
+                        ✏️ Correct Extracted Text (Fairness Safety Net)
+                      </button>
+                    ) : (
+                      <div style={{
+                        marginTop: '0.5rem',
+                        padding: '0.75rem',
+                        backgroundColor: '#F8FAFC',
+                        borderRadius: '6px',
+                        border: '1px solid #CBD5E1',
+                      }}>
+                        <div style={{ fontWeight: 600, fontSize: '0.8rem', color: '#334155', marginBottom: '0.35rem' }}>
+                          ⚖️ Fairness Safety Net: Edit Text & Auto Re-grade
+                        </div>
+                        <textarea
+                          className="form-control"
+                          rows={3}
+                          value={teacherCorrectText}
+                          onChange={(e) => setTeacherCorrectText(e.target.value)}
+                          placeholder="Enter corrected answer text..."
+                          style={{ fontSize: '0.85rem', marginBottom: '0.4rem' }}
+                        />
+                        <input
+                          type="text"
+                          className="form-control"
+                          placeholder="Note for audit log (required)"
+                          value={teacherCorrectNote}
+                          onChange={(e) => setTeacherCorrectNote(e.target.value)}
+                          style={{ fontSize: '0.8rem', marginBottom: '0.5rem' }}
+                        />
+                        <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+                          <button
+                            type="button"
+                            className="btn btn-outline btn-sm"
+                            style={{ fontSize: '0.75rem' }}
+                            onClick={() => setEditingAnswerId(null)}
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-primary btn-sm"
+                            style={{ fontSize: '0.75rem' }}
+                            disabled={savingTeacherCorrect || !teacherCorrectText.trim()}
+                            onClick={() => handleTeacherCorrectSubmit(ans.answer_id)}
+                          >
+                            {savingTeacherCorrect ? 'Re-grading...' : 'Save & Re-grade Answer'}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {data.file_status === 'OCR low confidence' && (
+                    <div style={{ marginTop: '0.5rem', fontSize: '0.75rem', color: '#D97706' }}>
+                      🔍 OCR was used. Review text against original page scan above if text looks garbled.
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
 
           {/* RIGHT PANE: Rubric, Citations, Doubt & Override */}
@@ -278,9 +525,144 @@ export const SubmissionDetailModal = ({ submissionId, onClose, onUpdated }) => {
 
             {data.answers.map((ans) => (
               <div key={ans.answer_id} style={{ marginBottom: '1.5rem' }}>
-                <div style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--text-main)', marginBottom: '0.5rem' }}>
-                  Question {ans.question_number} Criteria
+                <div style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--text-main)', marginBottom: '0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span>Question {ans.question_number} Criteria</span>
+                  <span className="badge" style={{ fontSize: '0.7rem', backgroundColor: '#F1F5F9', color: '#475569' }}>
+                    Type: {ans.question_type === 'math_numeric' ? '🔢 Math/Numeric' : (ans.question_type === 'mixed' ? '🔀 Mixed' : '📝 Text')}
+                  </span>
                 </div>
+
+                {/* Phase B: External AI Verifier Advisory Panel */}
+                {ans.external_verification && (
+                  <div style={{
+                    marginBottom: '1rem',
+                    backgroundColor: '#F8FAFC',
+                    border: '1.5px solid #CBD5E1',
+                    borderRadius: '8px',
+                    padding: '0.85rem',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                        <span style={{ fontSize: '1rem' }}>🔬</span>
+                        <strong style={{ fontSize: '0.85rem', color: '#1E293B' }}>External AI Verifier</strong>
+                        <span className="badge" style={{ backgroundColor: '#EEF2FF', color: '#4F46E5', fontSize: '0.7rem', fontWeight: 600 }}>
+                          {ans.external_verification.label || 'Checked outside course material'}
+                        </span>
+                      </div>
+                      <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#64748B' }}>
+                        Advisory Only (0 Auto Marks)
+                      </span>
+                    </div>
+
+                    {/* SymPy Deterministic Check */}
+                    <div style={{
+                      backgroundColor: '#FFFFFF',
+                      border: '1px solid #E2E8F0',
+                      borderRadius: '6px',
+                      padding: '0.5rem 0.75rem',
+                      marginBottom: '0.5rem',
+                      fontSize: '0.8rem',
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.25rem' }}>
+                        <span style={{ fontWeight: 600, color: '#334155' }}>1. SymPy Deterministic Check:</span>
+                        {ans.external_verification.sympy_result === 'equivalent' ? (
+                          <span className="badge badge-approved" style={{ fontSize: '0.7rem' }}>✓ Symbolically Equivalent</span>
+                        ) : ans.external_verification.sympy_result === 'different' ? (
+                          <span className="badge badge-flagged" style={{ fontSize: '0.7rem', backgroundColor: '#FEE2E2', color: '#DC2626' }}>≠ Evaluated Value Differs</span>
+                        ) : (
+                          <span className="badge" style={{ backgroundColor: '#FEF3C7', color: '#D97706', fontSize: '0.7rem' }}>⚠️ Parse Failed (No Guessing)</span>
+                        )}
+                      </div>
+                      <div style={{ color: '#64748B', fontSize: '0.75rem' }}>
+                        {ans.external_verification.sympy_details}
+                      </div>
+                      {ans.external_verification.student_expr_parsed && (
+                        <div style={{ marginTop: '0.25rem', fontSize: '0.75rem', color: '#475569', fontFamily: 'monospace' }}>
+                          Parsed: <strong>{ans.external_verification.student_expr_parsed}</strong>
+                          {ans.external_verification.model_expr_parsed && (
+                            <span> vs Reference: <strong>{ans.external_verification.model_expr_parsed}</strong></span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Second-Opinion LLM Check */}
+                    <div style={{
+                      backgroundColor: '#FFFFFF',
+                      border: '1px solid #E2E8F0',
+                      borderRadius: '6px',
+                      padding: '0.5rem 0.75rem',
+                      marginBottom: '0.5rem',
+                      fontSize: '0.8rem',
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.25rem' }}>
+                        <span style={{ fontWeight: 600, color: '#334155' }}>2. Second-Opinion LLM Verifier:</span>
+                        {ans.external_verification.llm_verdict === 'valid' ? (
+                          <span className="badge badge-approved" style={{ fontSize: '0.7rem' }}>✓ Valid Alternate Method</span>
+                        ) : ans.external_verification.llm_verdict === 'partially_valid' ? (
+                          <span className="badge" style={{ backgroundColor: '#FEF3C7', color: '#D97706', fontSize: '0.7rem' }}>⚠️ Partially Valid</span>
+                        ) : ans.external_verification.llm_verdict === 'invalid' ? (
+                          <span className="badge" style={{ backgroundColor: '#FEE2E2', color: '#DC2626', fontSize: '0.7rem' }}>✕ Invalid Method</span>
+                        ) : (
+                          <span className="badge" style={{ backgroundColor: '#F1F5F9', color: '#64748B', fontSize: '0.7rem' }}>❓ Cannot Verify</span>
+                        )}
+                      </div>
+
+                      {ans.external_verification.first_incorrect_step && (
+                        <div style={{ color: '#DC2626', fontWeight: 600, fontSize: '0.75rem', marginBottom: '0.3rem' }}>
+                          ⚠️ Flaw: {ans.external_verification.first_incorrect_step}
+                        </div>
+                      )}
+
+                      {ans.external_verification.step_notes && ans.external_verification.step_notes.length > 0 && (
+                        <div style={{ marginTop: '0.3rem' }}>
+                          <span style={{ fontSize: '0.72rem', fontWeight: 600, color: '#475569' }}>Step-by-step Notes:</span>
+                          <ul style={{ margin: '0.2rem 0 0 1rem', padding: 0, fontSize: '0.75rem', color: '#334155' }}>
+                            {ans.external_verification.step_notes.map((note, nIdx) => (
+                              <li key={nIdx}>{note}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Course Material Context */}
+                    <div style={{ fontSize: '0.75rem', color: '#64748B', marginBottom: '0.6rem' }}>
+                      <strong>Course Material Coverage:</strong> {ans.model_answer ? `Anchored to: "${ans.model_answer.slice(0, 100)}..."` : 'No direct course notes cover this specific alternate formulation.'}
+                    </div>
+
+                    {/* Teacher Action Controls */}
+                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center', borderTop: '1px solid #E2E8F0', paddingTop: '0.5rem' }}>
+                      <button
+                        type="button"
+                        className="btn btn-primary btn-sm"
+                        style={{ fontSize: '0.75rem', padding: '0.3rem 0.6rem' }}
+                        disabled={savingMethodQId === ans.question_id}
+                        onClick={() => handleAcceptMethod(ans.question_id, ans.student_answer_text)}
+                      >
+                        {savingMethodQId === ans.question_id ? 'Saving...' : '✓ Accept this method'}
+                      </button>
+
+                      <button
+                        type="button"
+                        className="btn btn-outline btn-sm"
+                        style={{ fontSize: '0.75rem', padding: '0.3rem 0.6rem' }}
+                        disabled={regradingQId === ans.question_id}
+                        onClick={() => handleRegradeUnpublished(ans.question_id)}
+                        title="Regrades all unpublished submissions for this question citing this accepted method"
+                      >
+                        {regradingQId === ans.question_id ? 'Regrading...' : '🔄 Regrade unpublished for this question'}
+                      </button>
+
+                      {ans.alternative_methods && ans.alternative_methods.length > 0 && (
+                        <span style={{ fontSize: '0.72rem', color: '#059669', fontWeight: 600 }}>
+                          ({ans.alternative_methods.length} teacher-approved alternative{ans.alternative_methods.length > 1 ? 's' : ''} saved)
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 {ans.criteria_grades.map((cg) => {
                   const form = overrideForms[cg.criterion_id] || {
@@ -293,48 +675,77 @@ export const SubmissionDetailModal = ({ submissionId, onClose, onUpdated }) => {
                   return (
                     <div
                       key={cg.criterion_id}
-                      className="card"
                       style={{
-                        marginBottom: '0.75rem',
+                        marginBottom: '0.85rem',
                         backgroundColor: !cg.covered_by_material ? '#FFFBEB' : '#FFFFFF',
-                        borderColor: !cg.covered_by_material ? '#FCD34D' : 'var(--border)',
+                        border: `1.5px solid ${!cg.covered_by_material ? '#FCD34D' : isOverridden ? '#86EFAC' : '#E2E8F0'}`,
+                        borderLeft: `4px solid ${!cg.covered_by_material ? '#F59E0B' : isOverridden ? '#16A34A' : 'var(--primary)'}`,
+                        borderRadius: '8px',
+                        padding: '0.85rem 1rem',
+                        boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
                       }}
                     >
                       {/* Criterion Header */}
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.35rem' }}>
-                        <div style={{ fontWeight: 600, fontSize: '0.875rem', color: 'var(--text-main)' }}>
-                          Criterion {cg.order_num}: {cg.criterion_text}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.45rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flex: 1 }}>
+                          <span
+                            style={{
+                              fontSize: '0.75rem',
+                              fontWeight: 700,
+                              color: 'var(--primary)',
+                              backgroundColor: '#EFF6FF',
+                              padding: '0.15rem 0.45rem',
+                              borderRadius: '4px',
+                            }}
+                          >
+                            Criterion {cg.order_num}
+                          </span>
+                          <span style={{ fontWeight: 600, fontSize: '0.875rem', color: '#1E293B' }}>
+                            {cg.criterion_text}
+                          </span>
                         </div>
-                        <span style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--primary)', marginLeft: '0.75rem' }}>
+                        <span
+                          style={{
+                            fontWeight: 700,
+                            fontSize: '0.9rem',
+                            backgroundColor: !cg.covered_by_material ? '#FEF3C7' : '#EFF6FF',
+                            color: !cg.covered_by_material ? '#B45309' : '#1D4ED8',
+                            padding: '0.2rem 0.6rem',
+                            borderRadius: '12px',
+                            border: `1px solid ${!cg.covered_by_material ? '#FCD34D' : '#BFDBFE'}`,
+                            marginLeft: '0.75rem',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
                           {cg.marks_awarded} / {cg.max_marks} pts
                         </span>
                       </div>
 
                       {/* Not Covered in Course Material Alert */}
                       {!cg.covered_by_material ? (
-                        <div style={{ backgroundColor: '#FEF3C7', padding: '0.5rem 0.75rem', borderRadius: '4px', fontSize: '0.8rem', color: '#D97706', marginBottom: '0.5rem' }}>
-                          <strong>⚠️ Not covered in course material:</strong> No guessed marks awarded. Needs teacher decision.
+                        <div style={{ backgroundColor: '#FEF3C7', padding: '0.5rem 0.75rem', borderRadius: '6px', fontSize: '0.8rem', color: '#B45309', marginBottom: '0.5rem', border: '1px solid #FDE68A' }}>
+                          <strong>⚠️ Not covered in course material:</strong> No guessed marks awarded. Needs teacher review.
                         </div>
                       ) : (
-                        <div style={{ fontSize: '0.825rem', color: 'var(--text-muted)', marginBottom: '0.4rem' }}>
-                          <strong>AI Reason:</strong> {cg.ai_reason}
+                        <div style={{ fontSize: '0.825rem', color: '#475569', marginBottom: '0.4rem', lineHeight: 1.5 }}>
+                          <strong style={{ color: '#334155' }}>AI Reason:</strong> {cg.ai_reason}
                         </div>
                       )}
 
                       {/* CITED Course Chunk with Page Number */}
                       {cg.cited_chunk_id ? (
                         <div style={{
-                          backgroundColor: 'var(--panel-bg)',
-                          border: '1px solid var(--border)',
-                          borderRadius: '4px',
-                          padding: '0.4rem 0.6rem',
+                          backgroundColor: '#F8FAFC',
+                          border: '1px solid #E2E8F0',
+                          borderRadius: '6px',
+                          padding: '0.45rem 0.65rem',
                           fontSize: '0.775rem',
                           marginBottom: '0.6rem',
                         }}>
-                          <span style={{ fontWeight: 600, color: 'var(--primary)' }}>
+                          <span style={{ fontWeight: 700, color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
                             📄 Cited Course Note (Page {cg.cited_page_num}, Chunk #{cg.cited_chunk_id}):
                           </span>
-                          <p style={{ fontStyle: 'italic', color: 'var(--text-main)', marginTop: '0.2rem' }}>
+                          <p style={{ fontStyle: 'italic', color: '#334155', marginTop: '0.25rem', margin: '0.25rem 0 0 0' }}>
                             "{cg.cited_text}"
                           </p>
                         </div>
@@ -342,8 +753,8 @@ export const SubmissionDetailModal = ({ submissionId, onClose, onUpdated }) => {
 
                       {/* Overrides History if any */}
                       {isOverridden && (
-                        <div style={{ fontSize: '0.75rem', color: '#16A34A', marginBottom: '0.4rem' }}>
-                          ✓ Override saved by teacher
+                        <div style={{ fontSize: '0.75rem', color: '#16A34A', fontWeight: 600, marginBottom: '0.4rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                          ✓ Override saved by instructor
                         </div>
                       )}
 

@@ -10,6 +10,7 @@ export const StudentDashboard = () => {
   const [assignments, setAssignments] = useState([]);
   const [submissionMap, setSubmissionMap] = useState({});
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState('assignments'); // 'assignments' or 'examinations'
 
   // Active submission modal state
   const [activeAssignment, setActiveAssignment] = useState(null);
@@ -113,14 +114,53 @@ export const StudentDashboard = () => {
         </p>
       </div>
 
+      {/* Tabs */}
+      <div style={{ display: 'flex', gap: '0.5rem', borderBottom: '1px solid var(--border)', marginBottom: '1.5rem' }}>
+        <button
+          type="button"
+          style={{
+            padding: '0.6rem 1.2rem',
+            border: 'none',
+            borderBottom: activeTab === 'assignments' ? '3px solid var(--primary)' : '3px solid transparent',
+            backgroundColor: 'transparent',
+            fontWeight: activeTab === 'assignments' ? 700 : 500,
+            color: activeTab === 'assignments' ? 'var(--primary)' : 'var(--text-muted)',
+            cursor: 'pointer',
+            fontSize: '0.95rem',
+          }}
+          onClick={() => setActiveTab('assignments')}
+        >
+          📝 Assignments ({assignments.filter((a) => (a.kind || 'assignment') === 'assignment').length})
+        </button>
+
+        <button
+          type="button"
+          style={{
+            padding: '0.6rem 1.2rem',
+            border: 'none',
+            borderBottom: activeTab === 'examinations' ? '3px solid var(--primary)' : '3px solid transparent',
+            backgroundColor: 'transparent',
+            fontWeight: activeTab === 'examinations' ? 700 : 500,
+            color: activeTab === 'examinations' ? 'var(--primary)' : 'var(--text-muted)',
+            cursor: 'pointer',
+            fontSize: '0.95rem',
+          }}
+          onClick={() => setActiveTab('examinations')}
+        >
+          🎓 Examinations ({assignments.filter((a) => a.kind === 'examination').length})
+        </button>
+      </div>
+
       <div className="panel">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
           <div>
             <h2 style={{ fontSize: '1.15rem', fontWeight: 600, color: 'var(--primary)' }}>
-              Assigned Work ({assignments.length})
+              {activeTab === 'examinations' ? 'Course Examinations' : 'Course Assignments'}
             </h2>
             <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-              Whole-assignment submissions with automated answer splitting preview.
+              {activeTab === 'examinations'
+                ? 'High-stakes examinations: Single attempt only. Read-only OCR preview.'
+                : 'Assignments: Resubmissions permitted before deadline + 2-minute post-submission correction window.'}
             </span>
           </div>
           <button type="button" className="btn btn-outline btn-sm" onClick={fetchDashboardData}>
@@ -130,96 +170,169 @@ export const StudentDashboard = () => {
 
         {loading ? (
           <p>Loading course assignments...</p>
-        ) : assignments.length === 0 ? (
-          <div className="card" style={{ textAlign: 'center', padding: '2.5rem' }}>
-            <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem' }}>
-              No assignments published yet. When your instructor publishes an assignment, it will appear here automatically.
-            </p>
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-            {assignments.map((a) => {
-              const subInfo = submissionMap[a.id];
-              const hasSub = subInfo?.has_submission;
-              const isPublished = subInfo?.latest?.status === 'published';
-              const isPast = a.deadline && new Date() > new Date(a.deadline);
-              const isBlocked = isPast && a.late_policy === 'block';
+        ) : (() => {
+          const currentKind = activeTab === 'examinations' ? 'examination' : 'assignment';
+          const filteredList = assignments.filter((a) => (a.kind || 'assignment') === currentKind);
 
-              return (
-                <div key={a.id} className="card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.35rem' }}>
-                      <h3 style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--text-main)' }}>{a.title}</h3>
-                      {getStatusBadge(a, subInfo)}
-                    </div>
+          if (filteredList.length === 0) {
+            return (
+              <div className="card" style={{ textAlign: 'center', padding: '2.5rem' }}>
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem' }}>
+                  No {activeTab === 'examinations' ? 'examinations' : 'assignments'} published yet.
+                </p>
+              </div>
+            );
+          }
 
-                    <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', display: 'flex', gap: '1.5rem', flexWrap: 'wrap' }}>
-                      <span><strong>Deadline:</strong> {a.deadline ? new Date(a.deadline).toLocaleString() : 'Open'}</span>
-                      <span><strong>Countdown:</strong> {formatCountdown(a.deadline)}</span>
-                      <span>
-                        <strong>Late Policy:</strong>{' '}
-                        {a.late_policy === 'block' ? 'Blocked after deadline' : a.late_policy === 'accept_penalty' ? `${a.penalty_percent}% Penalty` : 'Accepted as Late'}
-                      </span>
-                    </div>
+          return (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              {filteredList.map((a) => {
+                const subInfo = submissionMap[a.id];
+                const hasSub = subInfo?.has_submission;
+                const latest = subInfo?.latest;
+                const isPublished = latest?.status === 'published';
+                const isPast = a.deadline && new Date() > new Date(a.deadline);
+                const isBlocked = isPast && a.late_policy === 'block';
+                const isExam = a.kind === 'examination';
+                const inCorrectionWindow = latest?.in_correction_window;
 
-                    {hasSub && (
-                      <div style={{ marginTop: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-                        <div style={{ fontSize: '0.8rem', color: 'var(--primary)' }}>
-                          Receipt: <strong>{subInfo.latest.receipt_id}</strong> • Submitted: {new Date(subInfo.latest.created_at).toLocaleTimeString()}
-                        </div>
-                        {isPublished ? (
-                          <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#16A34A', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                            <span>🎉 Result Published by Instructor!</span>
-                            <span className="badge badge-approved" style={{ fontSize: '0.8rem' }}>
-                              Score Released
-                            </span>
-                          </div>
-                        ) : (
-                          <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', backgroundColor: 'var(--panel-bg)', padding: '0.3rem 0.6rem', borderRadius: '4px', border: '1px solid var(--border)', display: 'inline-block', width: 'fit-content' }}>
-                            ⏳ <strong>Status: Under Teacher Review</strong> — AI grading complete; marks will appear here once your instructor clicks "Publish Results".
-                          </div>
+                return (
+                  <div key={a.id} className="card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.35rem' }}>
+                        <h3 style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--text-main)' }}>{a.title}</h3>
+                        <span className="badge" style={{ backgroundColor: isExam ? '#EFF6FF' : '#F0FDF4', color: isExam ? '#1E40AF' : '#166534', border: '1px solid ' + (isExam ? '#BFDBFE' : '#BBF7D0'), fontWeight: 600 }}>
+                          {isExam ? '🎓 Examination' : '📝 Assignment'}
+                        </span>
+                        {getStatusBadge(a, subInfo)}
+                        {inCorrectionWindow && (
+                          <span className="badge" style={{ backgroundColor: '#FEF3C7', color: '#B45309', border: '1px solid #FCD34D', fontWeight: 600 }}>
+                            ⏱️ Correction Window: {latest?.seconds_remaining || 0}s left
+                          </span>
                         )}
                       </div>
-                    )}
-                  </div>
 
-                  <div style={{ display: 'flex', gap: '0.5rem' }}>
-                    {isPublished ? (
-                      <button
-                        type="button"
-                        className="btn btn-primary btn-sm"
-                        onClick={() => handleOpenPublishedResult(a.id)}
-                      >
-                        🎓 View Grade & Feedback
-                      </button>
-                    ) : (
-                      <>
-                        {hasSub && (
-                          <button
-                            type="button"
-                            className="btn btn-outline btn-sm"
-                            onClick={() => setViewingReceipt(subInfo.latest)}
-                          >
-                            Receipt & Answers
-                          </button>
+                      <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', display: 'flex', gap: '1.5rem', flexWrap: 'wrap' }}>
+                        <span><strong>Deadline:</strong> {a.deadline ? new Date(a.deadline).toLocaleString() : 'Open'}</span>
+                        <span><strong>Countdown:</strong> {formatCountdown(a.deadline)}</span>
+                        <span>
+                          <strong>Late Policy:</strong>{' '}
+                          {a.late_policy === 'block' ? 'Blocked after deadline' : a.late_policy === 'accept_penalty' ? `${a.penalty_percent}% Penalty` : 'Accepted as Late'}
+                        </span>
+                        {isExam && (
+                          <span style={{ color: '#DC2626', fontWeight: 500 }}>⚠️ Single Attempt Only</span>
                         )}
+                      </div>
 
+                      {hasSub && (
+                        <div style={{ marginTop: '0.5rem', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                          <div style={{ fontSize: '0.8rem', color: 'var(--primary)' }}>
+                            Receipt: <strong>{latest.receipt_id}</strong> • Submitted: {new Date(latest.created_at).toLocaleTimeString()}
+                          </div>
+                          {isPublished ? (
+                            <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#16A34A', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                              <span>🎉 Result Published by Instructor!</span>
+                              <span className="badge badge-approved" style={{ fontSize: '0.8rem' }}>
+                                Score Released
+                              </span>
+                            </div>
+                          ) : inCorrectionWindow ? (
+                            <div style={{ fontSize: '0.8rem', color: '#92400E', backgroundColor: '#FEF3C7', padding: '0.3rem 0.6rem', borderRadius: '4px', border: '1px solid #FCD34D', display: 'inline-block', width: 'fit-content' }}>
+                              ⏱️ <strong>Correction Window Active:</strong> You can edit your extracted answers or add an OCR comment. AI grading starts once the timer ends.
+                            </div>
+                          ) : (
+                            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', backgroundColor: 'var(--panel-bg)', padding: '0.3rem 0.6rem', borderRadius: '4px', border: '1px solid var(--border)', display: 'inline-block', width: 'fit-content' }}>
+                              ⏳ <strong>Status: Under Teacher Review</strong> — AI grading complete; marks will appear here once your instructor clicks "Publish Results".
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                      {isPublished ? (
                         <button
                           type="button"
                           className="btn btn-primary btn-sm"
-                          disabled={isBlocked && !hasSub}
-                          onClick={() => setActiveAssignment(a)}
+                          onClick={() => handleOpenPublishedResult(a.id)}
                         >
-                          {hasSub ? 'Resubmit Work' : 'Submit Work'}
+                          🎓 View Grade & Feedback
                         </button>
-                      </>
-                    )}
+                      ) : (
+                        <>
+                          {hasSub && (
+                            <button
+                              type="button"
+                              className="btn btn-outline btn-sm"
+                              onClick={() => setViewingReceipt(latest)}
+                            >
+                              Receipt & Answers
+                            </button>
+                          )}
+
+                          {isExam ? (
+                            hasSub ? (
+                              <button
+                                type="button"
+                                className="btn btn-outline btn-sm"
+                                disabled={true}
+                                style={{ backgroundColor: '#F1F5F9', color: '#64748B', cursor: 'not-allowed', borderColor: '#CBD5E1' }}
+                                title="Examinations permit exactly one submission attempt. Resubmissions are disabled."
+                              >
+                                🔒 Submitted (Examination - Locked)
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                className="btn btn-primary btn-sm"
+                                disabled={isBlocked}
+                                onClick={() => setActiveAssignment(a)}
+                              >
+                                Start Examination
+                              </button>
+                            )
+                          ) : (
+                            hasSub ? (
+                              inCorrectionWindow ? (
+                                <button
+                                  type="button"
+                                  className="btn btn-primary btn-sm"
+                                  style={{ backgroundColor: '#D97706', borderColor: '#B45309' }}
+                                  onClick={() => setActiveAssignment(a)}
+                                >
+                                  ✏️ Edit in Window ({latest?.seconds_remaining || 0}s left)
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  className="btn btn-outline btn-sm"
+                                  disabled={true}
+                                  style={{ backgroundColor: '#F1F5F9', color: '#64748B', cursor: 'not-allowed', borderColor: '#CBD5E1' }}
+                                  title="Correction window has closed. Your submission is locked and final. Resubmission is disabled."
+                                >
+                                  🔒 Submitted (Final - Locked)
+                                </button>
+                              )
+                            ) : (
+                              <button
+                                type="button"
+                                className="btn btn-primary btn-sm"
+                                disabled={isBlocked}
+                                onClick={() => setActiveAssignment(a)}
+                              >
+                                Submit Work
+                              </button>
+                            )
+                          )}
+                        </>
+                      )}
+                    </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
+                );
+              })}
+            </div>
+          );
+        })()}
       </div>
 
       {/* Submission Modal */}

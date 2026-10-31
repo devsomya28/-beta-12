@@ -30,6 +30,7 @@ class QuestionInput(BaseModel):
     model_answer: Optional[str] = None
     source_chunks_info: Optional[str] = None
     is_uncovered: Optional[bool] = False
+    question_type: Optional[str] = "text"  # 'text', 'math_numeric', 'mixed'
     criteria: List[CriterionInput] = []
 
 class CreateAssignmentRequest(BaseModel):
@@ -39,6 +40,7 @@ class CreateAssignmentRequest(BaseModel):
     deadline: Optional[str] = None
     late_policy: Optional[str] = "accept_penalty"
     penalty_percent: Optional[float] = 10.0
+    kind: Optional[str] = "assignment"  # 'assignment' or 'examination'
     questions: List[QuestionInput] = []
 
 class PublishAssignmentRequest(BaseModel):
@@ -46,6 +48,7 @@ class PublishAssignmentRequest(BaseModel):
     deadline: str  # ISO string or YYYY-MM-DDTHH:MM
     late_policy: str  # 'block', 'accept_late', 'accept_penalty'
     penalty_percent: float = 10.0
+    kind: Optional[str] = None
 
 class SuggestRubricRequest(BaseModel):
     course_id: int
@@ -104,6 +107,18 @@ async def upload_questions_file(
     success, questions, raw = provider.extract_questions(extracted_text)
     if not success:
         raise HTTPException(status_code=500, detail=f"Question extraction failed: {raw}")
+
+    # Phase B: AI suggests question_type (Text | Math/Numeric | Mixed)
+    from backend.app.verifier import has_math_or_calculation
+    for q in questions:
+        if "question_type" not in q or not q["question_type"]:
+            q_txt = q.get("question_text", "").lower()
+            if has_math_or_calculation(q_txt) or any(k in q_txt for k in ["calculate", "solve", "evaluate", "compute", "derivative", "integral", "matrix"]):
+                q["question_type"] = "math_numeric"
+            elif any(k in q_txt for k in ["derive", "explain and calculate", "prove"]):
+                q["question_type"] = "mixed"
+            else:
+                q["question_type"] = "text"
 
     return {
         "success": True,
@@ -187,7 +202,8 @@ def create_draft_assignment(
         deadline=deadline_dt,
         late_policy=req.late_policy or "accept_penalty",
         penalty_percent=req.penalty_percent or 10.0,
-        status="draft"
+        status="draft",
+        kind=req.kind.lower() if req.kind else "assignment"
     )
     db.add(assignment)
     db.flush()
@@ -200,7 +216,8 @@ def create_draft_assignment(
             max_marks=q_in.max_marks,
             model_answer=q_in.model_answer,
             source_chunks_info=q_in.source_chunks_info,
-            is_uncovered=q_in.is_uncovered or False
+            is_uncovered=q_in.is_uncovered or False,
+            question_type=(q_in.question_type or "text").lower()
         )
         db.add(q)
         db.flush()
@@ -256,7 +273,8 @@ def update_assignment(
             max_marks=q_in.max_marks,
             model_answer=q_in.model_answer,
             source_chunks_info=q_in.source_chunks_info,
-            is_uncovered=q_in.is_uncovered or False
+            is_uncovered=q_in.is_uncovered or False,
+            question_type=(q_in.question_type or "text").lower()
         )
         db.add(q)
         db.flush()
@@ -301,12 +319,14 @@ def publish_assignment(
     assignment.deadline = datetime.fromisoformat(req.deadline.replace("Z", ""))
     assignment.late_policy = req.late_policy
     assignment.penalty_percent = req.penalty_percent
+    if req.kind:
+        assignment.kind = req.kind.lower()
     assignment.status = "published"
 
     audit = AuditLog(
         user_id=teacher.id,
         event_type="PUBLISH_ASSIGNMENT",
-        details=f"Published assignment '{assignment.title}'. Deadline: {assignment.deadline.isoformat()}, Late policy: {assignment.late_policy}"
+        details=f"Published {assignment.kind} '{assignment.title}'. Deadline: {assignment.deadline.isoformat()}, Late policy: {assignment.late_policy}"
     )
     db.add(audit)
     db.commit()
@@ -315,9 +335,10 @@ def publish_assignment(
         "id": assignment.id,
         "title": assignment.title,
         "status": assignment.status,
+        "kind": assignment.kind or "assignment",
         "deadline": assignment.deadline.isoformat(),
         "late_policy": assignment.late_policy,
-        "message": "Assignment approved and published to students."
+        "message": f"{assignment.kind.capitalize()} approved and published to students."
     }
 
 @router.get("/{assignment_id}")
@@ -344,6 +365,7 @@ def get_assignment(
         "course_id": assignment.course_id,
         "title": assignment.title,
         "description": assignment.description,
+        "kind": assignment.kind or "assignment",
         "deadline": assignment.deadline.isoformat() if assignment.deadline else None,
         "late_policy": assignment.late_policy,
         "penalty_percent": assignment.penalty_percent,
@@ -354,9 +376,11 @@ def get_assignment(
                 "question_number": q.question_number,
                 "question_text": q.question_text,
                 "max_marks": q.max_marks,
+                "question_type": q.question_type or "text",
                 "model_answer": q.model_answer if current_user.role == "teacher" else None,  # Hide model answer from students!
                 "source_chunks_info": q.source_chunks_info if current_user.role == "teacher" else None,
                 "is_uncovered": q.is_uncovered,
+                "alternative_methods": json.loads(q.alternative_methods) if (current_user.role == "teacher" and q.alternative_methods) else [],
                 "criteria": [
                     {
                         "id": c.id,
@@ -392,6 +416,7 @@ def list_course_assignments(
             "id": a.id,
             "title": a.title,
             "description": a.description,
+            "kind": a.kind or "assignment",
             "deadline": a.deadline.isoformat() if a.deadline else None,
             "late_policy": a.late_policy,
             "penalty_percent": a.penalty_percent,

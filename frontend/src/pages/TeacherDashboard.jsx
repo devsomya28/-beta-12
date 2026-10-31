@@ -9,7 +9,7 @@ export const TeacherDashboard = () => {
   const { user, apiFetch } = useAuth();
   const { aiOnline } = useAIStatus();
 
-  const [activeTab, setActiveTab] = useState('assignments'); // 'assignments' or 'materials'
+  const [activeTab, setActiveTab] = useState('assignments'); // 'assignments', 'examinations', 'materials', 'corrections'
   const [courseId] = useState(1); // CS101
 
   // Materials state
@@ -22,6 +22,7 @@ export const TeacherDashboard = () => {
   const [assignments, setAssignments] = useState([]);
   const [isEditing, setIsEditing] = useState(false);
   const [editingAssignment, setEditingAssignment] = useState(null);
+  const [showCreateModal, setShowCreateModal] = useState(false);
 
   // Corrections log state (Extra Feature C)
   const [correctionsData, setCorrectionsData] = useState(null);
@@ -148,16 +149,101 @@ export const TeacherDashboard = () => {
             <button
               type="button"
               className="btn btn-primary"
-              onClick={() => {
-                setEditingAssignment(null);
-                setIsEditing(true);
-              }}
+              onClick={() => setShowCreateModal(true)}
             >
-              + Create Assignment
+              + Create Assessment
             </button>
           </div>
         )}
       </div>
+
+      {/* Choose Assessment Kind Modal */}
+      {showCreateModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(31, 41, 55, 0.4)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 200,
+          padding: '1rem',
+        }}>
+          <div className="card" style={{ maxWidth: '480px', width: '100%', backgroundColor: '#FFFFFF', padding: '1.75rem', borderRadius: '12px', boxShadow: '0 10px 25px rgba(0,0,0,0.1)' }}>
+            <h3 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-main)', marginBottom: '0.5rem' }}>
+              Create Assessment: Choose Type
+            </h3>
+            <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '1.25rem' }}>
+              Select the assessment mode to configure student OCR rules and submission constraints:
+            </p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '1.25rem' }}>
+              <button
+                type="button"
+                className="btn btn-outline"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.85rem',
+                  padding: '1rem',
+                  textAlign: 'left',
+                  borderColor: '#93C5FD',
+                  backgroundColor: '#EFF6FF',
+                }}
+                onClick={() => {
+                  setShowCreateModal(false);
+                  setEditingAssignment({ kind: 'assignment' });
+                  setIsEditing(true);
+                }}
+              >
+                <span style={{ fontSize: '1.8rem' }}>📝</span>
+                <div>
+                  <div style={{ fontWeight: 700, color: '#1E40AF', fontSize: '1rem' }}>Assignment</div>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                    Standard coursework. Allows resubmissions and gives students a 2-minute post-submission correction window to fix OCR text and add comments.
+                  </div>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                className="btn btn-outline"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.85rem',
+                  padding: '1rem',
+                  textAlign: 'left',
+                  borderColor: '#93C5FD',
+                  backgroundColor: '#EFF6FF',
+                }}
+                onClick={() => {
+                  setShowCreateModal(false);
+                  setEditingAssignment({ kind: 'examination' });
+                  setIsEditing(true);
+                }}
+              >
+                <span style={{ fontSize: '1.8rem' }}>🎓</span>
+                <div>
+                  <div style={{ fontWeight: 700, color: '#1E40AF', fontSize: '1rem' }}>Examination</div>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                    High-stakes assessment. Strict single submission attempt only. Read-only student preview (no student edits or comments). Includes teacher fairness safety net.
+                  </div>
+                </div>
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <button type="button" className="btn btn-outline btn-sm" onClick={() => setShowCreateModal(false)}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Editor View */}
       {isEditing ? (
@@ -188,7 +274,24 @@ export const TeacherDashboard = () => {
               }}
               onClick={() => setActiveTab('assignments')}
             >
-              Assignments ({assignments.length})
+              📝 Assignments ({assignments.filter((a) => (a.kind || 'assignment') === 'assignment').length})
+            </button>
+
+            <button
+              type="button"
+              style={{
+                padding: '0.6rem 1.2rem',
+                border: 'none',
+                borderBottom: activeTab === 'examinations' ? '3px solid var(--primary)' : '3px solid transparent',
+                backgroundColor: 'transparent',
+                fontWeight: activeTab === 'examinations' ? 700 : 500,
+                color: activeTab === 'examinations' ? 'var(--primary)' : 'var(--text-muted)',
+                cursor: 'pointer',
+                fontSize: '0.95rem',
+              }}
+              onClick={() => setActiveTab('examinations')}
+            >
+              🎓 Examinations ({assignments.filter((a) => a.kind === 'examination').length})
             </button>
 
             <button
@@ -229,86 +332,102 @@ export const TeacherDashboard = () => {
             </button>
           </div>
 
-          {/* TAB 1: ASSIGNMENTS */}
-          {activeTab === 'assignments' && (
-            <div>
-              {assignments.length === 0 ? (
-                <div className="panel" style={{ textAlign: 'center', padding: '3rem 1.5rem' }}>
-                  <h3 style={{ fontSize: '1.2rem', fontWeight: 600, marginBottom: '0.5rem' }}>No assignments created yet</h3>
-                  <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '1.25rem' }}>
-                    Click "+ Create Assignment" to create questions, set rubrics, deadlines, and publish.
-                  </p>
-                  <button
-                    type="button"
-                    className="btn btn-primary"
-                    onClick={() => {
-                      setEditingAssignment(null);
-                      setIsEditing(true);
-                    }}
-                  >
-                    + Create Your First Assignment
-                  </button>
-                </div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                  {assignments.map((a) => (
-                    <div key={a.id} className="card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.35rem' }}>
-                          <h3 style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--text-main)' }}>{a.title}</h3>
-                          <span className={`badge ${a.status === 'published' ? 'badge-approved' : 'badge-flagged'}`}>
-                            {a.status === 'published' ? '✓ Published (Visible to Students)' : 'Draft (Invisible to Students)'}
-                          </span>
+          {/* TAB 1 & 2: ASSIGNMENTS & EXAMINATIONS */}
+          {(activeTab === 'assignments' || activeTab === 'examinations') && (() => {
+            const currentKind = activeTab === 'examinations' ? 'examination' : 'assignment';
+            const filteredList = assignments.filter((a) => (a.kind || 'assignment') === currentKind);
+
+            return (
+              <div>
+                {filteredList.length === 0 ? (
+                  <div className="panel" style={{ textAlign: 'center', padding: '3rem 1.5rem' }}>
+                    <h3 style={{ fontSize: '1.2rem', fontWeight: 600, marginBottom: '0.5rem' }}>
+                      No {activeTab === 'examinations' ? 'examinations' : 'assignments'} created yet
+                    </h3>
+                    <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '1.25rem' }}>
+                      Click "+ Create Assessment" above to configure questions, rubrics, and publish.
+                    </p>
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      onClick={() => {
+                        setEditingAssignment({ kind: currentKind });
+                        setIsEditing(true);
+                      }}
+                    >
+                      + Create Your First {activeTab === 'examinations' ? 'Examination' : 'Assignment'}
+                    </button>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    {filteredList.map((a) => (
+                      <div key={a.id} className="card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.35rem' }}>
+                            <h3 style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--text-main)' }}>{a.title}</h3>
+                            <span className="badge" style={{ backgroundColor: a.kind === 'examination' ? '#EFF6FF' : '#F0FDF4', color: a.kind === 'examination' ? '#1E40AF' : '#166534', border: '1px solid ' + (a.kind === 'examination' ? '#BFDBFE' : '#BBF7D0'), fontWeight: 600 }}>
+                              {a.kind === 'examination' ? '🎓 Examination' : '📝 Assignment'}
+                            </span>
+                            <span className={`badge ${a.status === 'published' ? 'badge-approved' : 'badge-flagged'}`}>
+                              {a.status === 'published' ? '✓ Published (Visible to Students)' : 'Draft (Invisible to Students)'}
+                            </span>
+                          </div>
+
+                          <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', display: 'flex', gap: '1.5rem', flexWrap: 'wrap' }}>
+                            <span><strong>Questions:</strong> {a.total_questions}</span>
+                            <span><strong>Deadline:</strong> {a.deadline ? new Date(a.deadline).toLocaleString() : 'Not set'}</span>
+                            <span><strong>Late Policy:</strong> {a.late_policy === 'block' ? 'Block Submissions' : a.late_policy === 'accept_penalty' ? `${a.penalty_percent}% Penalty` : 'Accept as Late'}</span>
+                            {a.kind === 'assignment' && (
+                              <span style={{ color: '#2563EB' }}>⏱️ 2-Min Correction Window</span>
+                            )}
+                            {a.kind === 'examination' && (
+                              <span style={{ color: '#D97706' }}>🔒 Single Submission Only</span>
+                            )}
+                          </div>
                         </div>
 
-                        <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)', display: 'flex', gap: '1.5rem', flexWrap: 'wrap' }}>
-                          <span><strong>Questions:</strong> {a.total_questions}</span>
-                          <span><strong>Deadline:</strong> {a.deadline ? new Date(a.deadline).toLocaleString() : 'Not set'}</span>
-                          <span><strong>Late Policy:</strong> {a.late_policy === 'block' ? 'Block Submissions' : a.late_policy === 'accept_penalty' ? `${a.penalty_percent}% Penalty` : 'Accept as Late'}</span>
-                        </div>
-                      </div>
+                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                          {a.status === 'published' && (
+                            <button
+                              type="button"
+                              className="btn btn-primary btn-sm"
+                              onClick={() => setReviewingAssignmentId(a.id)}
+                            >
+                              Review Submissions →
+                            </button>
+                          )}
 
-                      <div style={{ display: 'flex', gap: '0.5rem' }}>
-                        {a.status === 'published' && (
                           <button
                             type="button"
-                            className="btn btn-primary btn-sm"
-                            onClick={() => setReviewingAssignmentId(a.id)}
+                            className="btn btn-outline btn-sm"
+                            onClick={async () => {
+                              const res = await apiFetch(`/api/assignments/${a.id}`);
+                              if (res.ok) {
+                                const fullAssn = await res.json();
+                                setEditingAssignment(fullAssn);
+                                setIsEditing(true);
+                              }
+                            }}
                           >
-                            Review Submissions →
+                            Edit / Rubric
                           </button>
-                        )}
 
-                        <button
-                          type="button"
-                          className="btn btn-outline btn-sm"
-                          onClick={async () => {
-                            const res = await apiFetch(`/api/assignments/${a.id}`);
-                            if (res.ok) {
-                              const fullAssn = await res.json();
-                              setEditingAssignment(fullAssn);
-                              setIsEditing(true);
-                            }
-                          }}
-                        >
-                          Edit / Rubric
-                        </button>
-
-                        <button
-                          type="button"
-                          className="btn btn-outline btn-sm"
-                          style={{ color: '#DC2626', borderColor: '#FECACA' }}
-                          onClick={() => handleDeleteAssignment(a.id)}
-                        >
-                          Delete
-                        </button>
+                          <button
+                            type="button"
+                            className="btn btn-outline btn-sm"
+                            style={{ color: '#DC2626', borderColor: '#FECACA' }}
+                            onClick={() => handleDeleteAssignment(a.id)}
+                          >
+                            Delete
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {/* TAB 2: COURSE MATERIAL FOR RAG */}
           {activeTab === 'materials' && (
