@@ -1,0 +1,9 @@
+{
+  "name": "markanchor",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "build": "npm --prefix frontend install && npm --prefix frontend run build",
+    "start": "npm --prefix frontend run start"
+  }
+}
