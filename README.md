@@ -307,9 +307,9 @@ Developed with pride by **Team Beta 12**:
 
 | Member | Role | Core Contributions |
 | :--- | :--- | :--- |
-| **Somya Devda** | Full Stack & System Architect | Core Architecture, Automated Spot-Checks & Backend Integration |
-| **Prakrati Arya** | AI / ML & Evaluation Lead | Anchored RAG Engine, Groq Cross-Check & Answer Map Clustering |
-| **Ravi Arya** | Full Stack & UI/UX Engineer | React Client, D3 Force Graph Overhaul & UI/UX Design System |
+| **Prakrati Arya** | **Team Leader & AI / ML Lead** | Anchored RAG Engine, Groq Cross-Checking & Answer Map Clustering |
+| **Sanskriti Shrivastava** | **Backend Lead** | Core Architecture, Automated Spot-Checks & Backend Integration |
+| **Somya Devda** | **Frontend Lead** | React Client, D3 Force Graph Overhaul & UI/UX Design System |
 
 ---
 *MarkAnchor ⚓ — Anchored AI Grading You Can Trust.*
