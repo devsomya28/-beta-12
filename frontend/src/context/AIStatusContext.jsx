@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { API_BASE } from './AuthContext';
 
 const AIStatusContext = createContext(null);
 
@@ -12,7 +13,7 @@ export const AIStatusProvider = ({ children }) => {
   const checkHealth = useCallback(async () => {
     try {
       setChecking(true);
-      const res = await fetch('/health');
+      const res = await fetch(`${API_BASE}/health`);
       if (res.ok) {
         const data = await res.json();
         setAiOnline(data.ai_online);
@@ -44,7 +45,7 @@ export const AIStatusProvider = ({ children }) => {
   const toggleAI = async () => {
     try {
       const targetState = aiOnline; // if online, toggle to offline (forced = true)
-      const res = await fetch('/api/health/toggle-ai', {
+      const res = await fetch(`${API_BASE}/api/health/toggle-ai`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ offline: targetState }),

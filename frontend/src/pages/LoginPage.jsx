@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useAuth } from '../context/AuthContext';
+import { useAuth, API_BASE } from '../context/AuthContext';
 
 export const LoginPage = ({ onBack }) => {
   const { login, quickLogin, loading } = useAuth();
@@ -9,7 +9,7 @@ export const LoginPage = ({ onBack }) => {
   const [demoUsers, setDemoUsers] = useState([]);
 
   useEffect(() => {
-    fetch('/api/auth/demo-users')
+    fetch(`${API_BASE}/api/auth/demo-users`)
       .then((res) => (res.ok ? res.json() : []))
       .then((data) => setDemoUsers(data))
       .catch((err) => console.error('Error fetching demo users:', err));

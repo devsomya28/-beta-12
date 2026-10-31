@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useAuth } from '../context/AuthContext';
+import { useAuth, API_BASE } from '../context/AuthContext';
 import { useAIStatus } from '../context/AIStatusContext';
 
 export const HomeDashboard = ({ onOpenLogin }) => {
@@ -9,7 +9,7 @@ export const HomeDashboard = ({ onOpenLogin }) => {
   const [quickError, setQuickError] = useState('');
 
   useEffect(() => {
-    fetch('/api/auth/demo-users')
+    fetch(`${API_BASE}/api/auth/demo-users`)
       .then((res) => (res.ok ? res.json() : []))
       .then((data) => setDemoUsers(data))
       .catch((err) => console.error('Error fetching demo users:', err));

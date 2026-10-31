@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  markanchor:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: markanchor-app
+    ports:
+      - "8000:8000"
+    environment:
+      - LLM_MODE=mock
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - GROQ_MODEL=${GROQ_MODEL:-openai/gpt-oss-120b}
+      - SECRET_KEY=${SECRET_KEY:-markanchor-production-secret-key-2026}
+      - CORRECTION_WINDOW_SECONDS=120
+    volumes:
+      - markanchor_data:/app/uploads
+
+volumes:
+  markanchor_data:

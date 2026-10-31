@@ -1,0 +1,27 @@
+# Render Free Tier Blueprint Specification for MarkAnchor
+# Docs: https://render.com/docs/blueprint-spec
+
+services:
+  # Unified Single-Service Free Deployment (Backend + Frontend + SQLite + Tesseract OCR)
+  - type: web
+    name: markanchor-app
+    env: docker
+    dockerfilePath: Dockerfile
+    plan: free
+    region: oregon
+    healthCheckPath: /health
+    envVars:
+      - key: LLM_MODE
+        value: mock
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GROQ_MODEL
+        value: openai/gpt-oss-120b
+      - key: SECRET_KEY
+        generateValue: true
+      - key: CORRECTION_WINDOW_SECONDS
+        value: "120"
+      - key: VERIFIER_MODE
+        value: mock

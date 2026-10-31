@@ -1,4 +1,5 @@
 import os
+import shutil
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -16,7 +17,8 @@ LLM_MODE = os.getenv("LLM_MODE", "mock").lower()
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
-TESSERACT_CMD = os.getenv("TESSERACT_CMD", r"C:\Program Files\Tesseract-OCR\tesseract.exe")
+default_tesseract = shutil.which("tesseract") or r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+TESSERACT_CMD = os.getenv("TESSERACT_CMD", default_tesseract)
 
 # Demo toggle override for AI offline testing
 AI_OFFLINE_OVERRIDE = os.getenv("AI_OFFLINE_OVERRIDE", "false").lower() == "true"
