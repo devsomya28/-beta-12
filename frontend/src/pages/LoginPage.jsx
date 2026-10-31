@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 
-export const LoginPage = () => {
+export const LoginPage = ({ onBack }) => {
   const { login, quickLogin, loading } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -38,7 +38,29 @@ export const LoginPage = () => {
   const students = demoUsers.filter((u) => u.role === 'student');
 
   return (
-    <div className="login-container">
+    <div className="login-container" style={{ maxWidth: '480px' }}>
+      {onBack && (
+        <button
+          type="button"
+          onClick={onBack}
+          style={{
+            background: 'none',
+            border: 'none',
+            color: 'var(--primary)',
+            fontSize: '0.9rem',
+            fontWeight: 700,
+            cursor: 'pointer',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '0.35rem',
+            marginBottom: '1.25rem',
+            padding: 0,
+          }}
+        >
+          ← Back to Platform Dashboard
+        </button>
+      )}
+
       <div className="login-header">
         <h1>Sign In</h1>
         <p>Sign in to your MarkAnchor classroom account</p>

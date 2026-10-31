@@ -2,19 +2,52 @@ import React from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useAIStatus } from '../context/AIStatusContext';
 
-export const TopBar = () => {
+export const TopBar = ({ currentView = 'dashboard', onGoDashboard, onOpenLogin }) => {
   const { user, isAuthenticated, logout } = useAuth();
   const { aiOnline, provider, message, toggleAI, checking } = useAIStatus();
 
   return (
     <>
       <header className="top-bar">
-        <div className="brand-section">
+        <div
+          className="brand-section"
+          style={{ cursor: 'pointer' }}
+          onClick={onGoDashboard}
+          title="MarkAnchor Home"
+        >
           <div className="brand-title">MarkAnchor</div>
           <div className="brand-tagline">Anchored AI Grading</div>
         </div>
 
         <div className="top-bar-right">
+          {/* Unauthenticated Navigation Links */}
+          {!isAuthenticated && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginRight: '0.5rem' }}>
+              <button
+                type="button"
+                className={`btn btn-sm ${currentView === 'dashboard' ? 'btn-outline' : 'btn-outline'}`}
+                style={{
+                  fontWeight: 700,
+                  borderColor: currentView === 'dashboard' ? 'var(--primary)' : 'var(--border)',
+                  backgroundColor: currentView === 'dashboard' ? 'var(--panel-bg)' : '#FFFFFF',
+                  color: currentView === 'dashboard' ? 'var(--primary)' : 'var(--text-main)',
+                }}
+                onClick={onGoDashboard}
+              >
+                📊 Platform Dashboard
+              </button>
+
+              <button
+                type="button"
+                className={`btn btn-sm ${currentView === 'login' ? 'btn-primary' : 'btn-outline'}`}
+                style={{ fontWeight: 700 }}
+                onClick={onOpenLogin}
+              >
+                🔐 Sign In
+              </button>
+            </div>
+          )}
+
           {/* Global AI Status Indicator */}
           <button
             type="button"
